@@ -1,3 +1,4 @@
+from __future__ import print_function
 import torch
 import torch.nn as nn
 import numpy as np
@@ -23,7 +24,7 @@ Options:
     --NoLabels=<int>            The number of different labels in training data, VOC has 21 labels, including background [default: 21]
     --LISTpath=<str>            Input image number list file [default: data/VOC_arg/ImageSets/Segmentation/train.txt]
     --lr=<float>                Learning Rate [default: 0.00025]
-    -i, --iterSize=<int>        Num iters to accumulate gradients over [default: 10]
+    -i, --iterSize=<int>        Num iters to accumulate gradients over [default: 1]
     --wtDecay=<float>          Weight decay during training [default: 0.0005]
     --gpu0=<int>                GPU number [default: 0]
     --maxIter=<int>             Maximum number of iterations [default: 20000]
@@ -191,21 +192,21 @@ if int(args['--NoLabels']) != 21:
 model.load_state_dict(saved_state_dict)
 
 max_iter = int(args['--maxIter'])
-batch_size = 2
+batch_size = 16
 weight_decay = float(args['--wtDecay'])
 base_lr = float(args['--lr'])
 
 model.float()
 model.eval()  # use_global_stats = True
 
-net = torch.nn.DataParallel(model.cuda(), device_ids=[0, 1])
+net = torch.nn.DataParallel(model.cuda(), device_ids=range(8))
 criterion = nn.CrossEntropyLoss()  # use a Classification Cross-Entropy loss
 optimizer = optim.SGD([{'params': get_1x_lr_params_NOscale(model), 'lr': base_lr}, {'params': get_10x_lr_params(model), 'lr': 10 * base_lr}], lr=base_lr, momentum=0.9, weight_decay=weight_decay)
 
 optimizer.zero_grad()
 
 voc_arg_dataset = voc_arg.VOCArgDataset(args['--LISTpath'], args['--IMpath'], args['--GTpath'], transform=voc_arg.SegTransform(321, ignore_label=int(args['--Ignore'])))
-trainloader = DataLoader(voc_arg_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+trainloader = DataLoader(voc_arg_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
 trainiter = iter(trainloader)
 
 start = time.time()
@@ -233,12 +234,12 @@ for iter in range(max_iter + 1):
     optimizer.zero_grad()
 
     if iter % 10 == 0 and iter != 0:
-        print 'iter = ', iter, 'of', max_iter, 'completed, loss = ', tot_loss
-        print '(poly lr policy) learning rate', lr_
+        print('iter = ', iter, 'of', max_iter, 'completed, loss = ', tot_loss)
+        print('(poly lr policy) learning rate', lr_)
         time_left = int((time.time() - start) / iter * (max_iter - iter))
-        print 'Time left %d:%d' % (int(time_left / 3600), int((time_left % 3600) / 60))
+        print('Time left %d:%d' % (int(time_left / 3600), int((time_left % 3600) / 60)))
     if iter % 1000 == 0 and iter != 0:
-        print 'taking snapshot ...'
+        print('taking snapshot ...')
         torch.save(model.state_dict(), 'data/snapshots/VOC12_scenes_' + str(iter) + '.pth')
 end = time.time()
-print end - start, 'seconds'
+print(end - start, 'seconds')
