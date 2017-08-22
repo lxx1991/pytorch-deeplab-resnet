@@ -25,8 +25,7 @@ Options:
     --LISTpath=<str>            Input image number list file [default: data/VOC_arg/ImageSets/Segmentation/train.txt]
     --lr=<float>                Learning Rate [default: 0.00025]
     -i, --iterSize=<int>        Num iters to accumulate gradients over [default: 1]
-    --wtDecay=<float>          Weight decay during training [default: 0.0005]
-    --gpu0=<int>                GPU number [default: 0]
+    --wtDecay=<float>           Weight decay during training [default: 0.0005]
     --maxIter=<int>             Maximum number of iterations [default: 20000]
     --Ignore=<int>              Index of the ignore label [default: 255]
 """
@@ -35,87 +34,7 @@ Options:
 args = docopt(docstr, version='v0.1')
 print(args)
 
-cudnn.enabled = False
-gpu0 = int(args['--gpu0'])
-
-
-def outS(i):
-    """Given shape of input image as i,i,3 in deeplab-resnet model, this function
-    returns j such that the shape of output blob of is j,j,21 (21 in case of VOC)"""
-    j = int(i)
-    j = (j + 1) / 2
-    j = int(np.ceil((j + 1) / 2.0))
-    j = (j + 1) / 2
-    return j
-
-
-# def read_file(path_to_file):
-#     with open(path_to_file) as f:
-#         img_list = []
-#         for line in f:
-#             img_list.append(line[:-1])
-#     return img_list
-
-# def chunker(seq, size):
-#     return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
-
-# def scale_im(img_temp, scale):
-#     new_dims = (int(img_temp.shape[0] * scale), int(img_temp.shape[1] * scale))
-#     return cv2.resize(img_temp, new_dims).astype(float)
-
-# def scale_gt(img_temp, scale):
-#     new_dims = (int(img_temp.shape[0] * scale), int(img_temp.shape[1] * scale))
-#     return cv2.resize(img_temp, new_dims, interpolation=cv2.INTER_NEAREST).astype(float)
-
-# def get_data_from_chunk_v2(chunk):
-#     gt_path = args['--GTpath']
-#     img_path = args['--IMpath']
-#     ignore_label = int(args['--Ignore'])
-#     crop_dim = 321
-
-#     images = np.zeros((crop_dim, crop_dim, 3, len(chunk)))
-#     gt = np.zeros((outS(crop_dim), outS(crop_dim), len(chunk)))
-
-#     for i, piece in enumerate(chunk):
-#         scale = np.random.uniform(0.5, 1.5)  #random.uniform(0.5,1.5) does not fit in a Titan X with the present version of pytorch, so we random scaling in the range (0.5,1.3), different than caffe implementation in that caffe used only 4 fixed scales. Refer to read me
-#         flip_p = np.random.randint(0, 2)
-#         img_temp = cv2.imread(os.path.join(img_path, piece + '.jpg')).astype(float)
-#         gt_temp = cv2.imread(os.path.join(gt_path, piece + '.png'))[:, :, 0]
-#         img_temp = scale_im(img_temp, scale)
-#         gt_temp = scale_gt(gt_temp, scale)
-#         pad_h = max(crop_dim - img_temp.shape[0], 0)
-#         pad_w = max(crop_dim - img_temp.shape[1], 0)
-
-#         # padding
-#         if (pad_h > 0 or pad_w > 0):
-#             temp_h = np.random.randint(0, pad_h + 1)
-#             temp_w = np.random.randint(0, pad_w + 1)
-#             img_temp = cv2.copyMakeBorder(img_temp, temp_h, pad_h - temp_h, temp_w, pad_w - temp_w, cv2.BORDER_CONSTANT, value=[104.008, 116.669, 122.675])
-#             gt_temp = cv2.copyMakeBorder(gt_temp, temp_h, pad_h - temp_h, temp_w, pad_w - temp_w, cv2.BORDER_CONSTANT, value=ignore_label)
-
-#         # cropping
-#         temp_h = np.random.randint(0, img_temp.shape[0] - crop_dim + 1)
-#         temp_w = np.random.randint(0, img_temp.shape[1] - crop_dim + 1)
-#         img_temp = img_temp[temp_h:temp_h + crop_dim, temp_w:temp_w + crop_dim, :]
-#         gt_temp = gt_temp[temp_h:temp_h + crop_dim, temp_w:temp_w + crop_dim]
-
-#         img_temp[:, :, 0] = img_temp[:, :, 0] - 104.008
-#         img_temp[:, :, 1] = img_temp[:, :, 1] - 116.669
-#         img_temp[:, :, 2] = img_temp[:, :, 2] - 122.675
-
-#         if flip_p == 1:
-#             img_temp = np.fliplr(img_temp)
-#             gt_temp = np.fliplr(gt_temp)
-
-#         images[:, :, :, i] = img_temp
-#         gt[:, :, i] = cv2.resize(gt_temp, (outS(crop_dim), outS(crop_dim)), interpolation=cv2.INTER_NEAREST).astype(float)
-
-#     images = images.transpose((3, 2, 0, 1))
-#     images = torch.from_numpy(images).float()
-#     gt = gt.transpose((2, 0, 1))
-#     gt = torch.from_numpy(gt).long()
-
-#     return images, gt
+# cudnn.enabled = False
 
 
 def loss_calc(out, label):
@@ -201,45 +120,50 @@ model.eval()  # use_global_stats = True
 
 net = torch.nn.DataParallel(model.cuda(), device_ids=range(8))
 criterion = nn.CrossEntropyLoss()  # use a Classification Cross-Entropy loss
-optimizer = optim.SGD([{'params': get_1x_lr_params_NOscale(model), 'lr': base_lr}, {'params': get_10x_lr_params(model), 'lr': 10 * base_lr}], lr=base_lr, momentum=0.9, weight_decay=weight_decay)
+optimizer = optim.SGD([{'params': get_1x_lr_params_NOscale(net.module), 'lr': base_lr}, {'params': get_10x_lr_params(net.module), 'lr': 10 * base_lr}], lr=base_lr, momentum=0.9, weight_decay=weight_decay)
 
 optimizer.zero_grad()
 
 voc_arg_dataset = voc_arg.VOCArgDataset(args['--LISTpath'], args['--IMpath'], args['--GTpath'], transform=voc_arg.SegTransform(321, ignore_label=int(args['--Ignore'])))
+
 trainloader = DataLoader(voc_arg_dataset, batch_size=batch_size, shuffle=True, num_workers=16)
 trainiter = iter(trainloader)
 
 start = time.time()
-for iter in range(max_iter + 1):
-
+for i in range(max_iter + 1):
     iter_size = int(args['--iterSize'])
     tot_loss = 0
     for temp in range(iter_size):
-        image, label = trainiter.next()
-        image = Variable(image.float()).cuda(gpu0)
-        label = Variable(label.long()).cuda(gpu0)
+        try:
+            image, label = trainiter.next()
+        except StopIteration:
+            trainiter = iter(trainloader)
+            image, label = trainiter.next()
+        image = Variable(image.float()).cuda()
+        label = Variable(label.long()).cuda()
         out = net(image)
-        loss = loss_calc(out[0], label)
 
-        for i in range(len(out) - 1):
-            loss = loss + loss_calc(out[i + 1], label)
+        loss = loss_calc(out[0], label)
+        for j in range(len(out) - 1):
+            loss = loss + loss_calc(out[j + 1], label)
         loss = loss / iter_size
         loss.backward()
 
         tot_loss += loss.data.cpu().numpy()[0]
 
     optimizer.step()
-    lr_ = lr_poly(base_lr, iter, max_iter, 0.9)
-    optimizer = optim.SGD([{'params': get_1x_lr_params_NOscale(model), 'lr': lr_}, {'params': get_10x_lr_params(model), 'lr': 10 * lr_}], lr=lr_, momentum=0.9, weight_decay=weight_decay)
+    lr_ = lr_poly(base_lr, i, max_iter, 0.9)
+    optimizer = optim.SGD([{'params': get_1x_lr_params_NOscale(net.module), 'lr': lr_}, {'params': get_10x_lr_params(net.module), 'lr': 10 * lr_}], lr=lr_, momentum=0.9, weight_decay=weight_decay)
     optimizer.zero_grad()
 
-    if iter % 10 == 0 and iter != 0:
-        print('iter = ', iter, 'of', max_iter, 'completed, loss = ', tot_loss)
+    if i % 10 == 0 and i != 0:
+        print('iter = ', i, 'of', max_iter, 'completed, loss = ', tot_loss)
         print('(poly lr policy) learning rate', lr_)
-        time_left = int((time.time() - start) / iter * (max_iter - iter))
+        time_left = int((time.time() - start) / i * (max_iter - i))
         print('Time left %d:%d' % (int(time_left / 3600), int((time_left % 3600) / 60)))
-    if iter % 1000 == 0 and iter != 0:
+    if i % 1000 == 0 and i != 0:
         print('taking snapshot ...')
-        torch.save(model.state_dict(), 'data/snapshots/VOC12_scenes_' + str(iter) + '.pth')
+        torch.save(model.state_dict(), 'data/snapshots/VOC12_scenes_' + str(i) + '.pth')
+
 end = time.time()
 print(end - start, 'seconds')

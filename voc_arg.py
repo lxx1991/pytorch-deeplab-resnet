@@ -12,14 +12,18 @@ class SegTransform(object):
         self.ignore_label = ignore_label
 
     def __call__(self, image, label):
+
+        np.random.seed()
         scale = np.random.uniform(*self.rescale)  # random.uniform(0.5,1.5) does not fit in a Titan X with the present version of pytorch, so we random scaling in the range (0.5,1.3), different than caffe implementation in that caffe used only 4 fixed scales. Refer to read me
 
         if np.random.randint(0, 2) == 1:
             image = np.fliplr(image)
             label = np.fliplr(label)
 
-        new_dims = (int(image.shape[0] * scale), int(image.shape[1] * scale))
+        new_dims = (int(image.shape[1] * scale), int(image.shape[0] * scale))
         image = cv2.resize(image, new_dims)
+        # cv2.imshow('img0', image.astype(np.uint8));
+
         label = cv2.resize(label, new_dims, interpolation=cv2.INTER_NEAREST)
 
         pad_h = max(self.output_size - image.shape[0], 0)
@@ -37,6 +41,10 @@ class SegTransform(object):
         temp_w = np.random.randint(0, image.shape[1] - self.output_size + 1)
         image = image[temp_h:temp_h + self.output_size, temp_w:temp_w + self.output_size, :]
         label = label[temp_h:temp_h + self.output_size, temp_w:temp_w + self.output_size]
+
+        # cv2.imshow('img', image.astype(np.uint8));
+        # cv2.imshow('label', label);
+        # cv2.waitKey();
 
         image[:, :, 0] = image[:, :, 0] - self.mean_color[0]
         image[:, :, 1] = image[:, :, 1] - self.mean_color[1]
